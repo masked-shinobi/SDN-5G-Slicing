@@ -68,6 +68,16 @@ const ENDPOINTS: ApiEndpoint[] = [
     curlExample: 'curl -X POST http://localhost:3000/api/ping -H "Content-Type: application/json" -d \'{"slice":"A","count":4}\'',
   },
   {
+    id: "throughput-benchmark",
+    category: "traffic",
+    method: "POST",
+    path: "/api/traffic/throughput",
+    summary: "Execute 5QI QoS & Throughput Benchmark",
+    description: "Evaluates per-slice throughput (Mbps), AMBR rate shaping, and jitter under 5QI 9 (eMBB) and 5QI 82 (URLLC).",
+    defaultBody: JSON.stringify({ slice: "A", durationSeconds: 6 }, null, 2),
+    curlExample: 'curl -X POST http://localhost:3000/api/traffic/throughput -H "Content-Type: application/json" -d \'{"slice":"A","durationSeconds":6}\'',
+  },
+  {
     id: "test-lab-negative",
     category: "core",
     method: "POST",
