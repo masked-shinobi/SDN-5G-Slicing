@@ -92,3 +92,4 @@ export const DEFAULT_SLICES: SliceInfo[] = [
     },
   },
 ];
+

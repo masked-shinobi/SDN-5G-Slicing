@@ -43,3 +43,4 @@ describe("5G Slicing Utilities", () => {
     expect(DEFAULT_SLICES[1].sst).toBe(2);
   });
 });
+

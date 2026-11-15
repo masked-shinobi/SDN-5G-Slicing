@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Layers,
@@ -13,13 +15,44 @@ import {
   Clock,
   Sparkles,
   GitCommitHorizontal,
-  ScrollText,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import { SystemMetrics } from "@/lib/types";
 
 export default function DashboardPage() {
+  const [data, setData] = useState<SystemMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch("/api/status");
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        setLastUpdated(new Date().toLocaleTimeString());
+      }
+    } catch (err) {
+      console.error("Failed to fetch status:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeServices = data?.services.filter((s) => s.status === "active").length ?? 10;
+  const totalServices = data?.services.length ?? 10;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Hero Banner */}
+      {/* Top Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900/40 via-indigo-900/30 to-purple-900/40 border border-blue-500/20 p-6 md:p-8">
         <div className="relative z-10 max-w-3xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
@@ -30,7 +63,9 @@ export default function DashboardPage() {
             5G End-to-End Network Slicing
           </h1>
           <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-            Multi-tenant network virtualization running on <span className="text-foreground font-semibold">Open5GS 5G Core</span> and <span className="text-foreground font-semibold">UERANSIM v3.2.6</span>. 
+            Multi-tenant network virtualization running on{" "}
+            <span className="text-foreground font-semibold">Open5GS 5G Core</span> and{" "}
+            <span className="text-foreground font-semibold">UERANSIM v3.2.6</span>. 
             Isolated data networks, dedicated IP pools, and differentiated QoS profiles for eMBB and URLLC services.
           </p>
 
@@ -56,8 +91,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Decorative background glow */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-primary/10 to-transparent pointer-events-none" />
+        {/* Live sync pill */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 text-[11px] font-mono text-muted-foreground bg-background/80 px-3 py-1.5 rounded-full border border-border/50">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Polling 3s {lastUpdated && `• ${lastUpdated}`}</span>
+        </div>
       </div>
 
       {/* Top Level Metric Cards */}
@@ -71,12 +109,14 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-foreground">10/10</span>
+            <span className="text-2xl font-bold text-foreground">
+              {activeServices}/{totalServices}
+            </span>
             <span className="text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-              Healthy
+              {data?.coreHealth === "healthy" ? "All Active" : "Operational"}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">AMF, SMF, UPF, NRF, UDM, UDR active</p>
+          <p className="text-xs text-muted-foreground">AMF, SMF, UPF, NRF, UDM, UDR</p>
         </div>
 
         {/* Card 2: Active Slices */}
@@ -88,7 +128,9 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-foreground">2 Slices</span>
+            <span className="text-2xl font-bold text-foreground">
+              {data?.slices.length ?? 2} Slices
+            </span>
             <span className="text-xs font-semibold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full">
               SST 1 & SST 2
             </span>
@@ -122,9 +164,11 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-foreground">1 UE</span>
+            <span className="text-2xl font-bold text-foreground">
+              {data?.activeSubscribers ?? 1} UE
+            </span>
             <span className="text-xs font-semibold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
-              2 PDU Sessions
+              {data?.activePduSessions ?? 2} PDU Sessions
             </span>
           </div>
           <p className="text-xs font-mono text-muted-foreground truncate">IMSI: 999700000000001</p>
@@ -137,14 +181,14 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-xl font-bold tracking-tight">Active 5G Network Slices</h2>
             <p className="text-xs text-muted-foreground">
-              Isolated user-plane network tunnels bound to virtual interfaces
+              Dedicated user plane network tunnels isolated by S-NSSAI identifier
             </p>
           </div>
           <Link
             href="/slices"
             className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
           >
-            Manage Slices <ArrowRight className="w-3 h-3" />
+            Detailed Slices View <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
 
@@ -275,93 +319,43 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Navigation Cards */}
+      {/* 5G Core Network Functions Grid */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold tracking-tight">Project Modules</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Link
-            href="/subscribers"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <Users className="w-5 h-5 text-blue-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            <h4 className="font-bold text-sm text-foreground">Subscriber Provisioning</h4>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">Open5GS Core Network Functions</h2>
             <p className="text-xs text-muted-foreground">
-              Manage subscribed S-NSSAI slices in MongoDB for IMSI 999700000000001.
+              Monitored via <code className="font-mono bg-muted px-1 rounded">systemctl is-active</code>
             </p>
-          </Link>
+          </div>
+          <button
+            onClick={fetchStatus}
+            className="text-xs flex items-center gap-1.5 text-muted-foreground hover:text-foreground font-medium"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
 
-          <Link
-            href="/flow"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <GitCommitHorizontal className="w-5 h-5 text-indigo-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {data?.services.map((svc) => (
+            <div
+              key={svc.name}
+              className="p-3.5 rounded-xl bg-card border border-border/70 shadow-sm space-y-1.5"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-foreground">{svc.role}</span>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    svc.status === "active" ? "bg-emerald-500" : "bg-destructive"
+                  }`}
+                />
+              </div>
+              <div className="text-[11px] font-mono text-muted-foreground truncate">{svc.name}</div>
+              <div className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">
+                {svc.description}
+              </div>
             </div>
-            <h4 className="font-bold text-sm text-foreground">Animated Signaling Flow</h4>
-            <p className="text-xs text-muted-foreground">
-              Visualizes UE registration, NSSAI exchange, and PDU session creation step-by-step.
-            </p>
-          </Link>
-
-          <Link
-            href="/test-lab"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <ShieldCheck className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            <h4 className="font-bold text-sm text-foreground">Negative Slicing Test</h4>
-            <p className="text-xs text-muted-foreground">
-              Request unsubscribed SST 3 / SD 3 and verify rejection by Open5GS AMF.
-            </p>
-          </Link>
-
-          <Link
-            href="/traffic"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <Activity className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            <h4 className="font-bold text-sm text-foreground">Traffic & Latency Benchmark</h4>
-            <p className="text-xs text-muted-foreground">
-              Run real-time ping on uesimtun0 & uesimtun1 with live chart updates.
-            </p>
-          </Link>
-
-          <Link
-            href="/logs"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <ScrollText className="w-5 h-5 text-purple-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            <h4 className="font-bold text-sm text-foreground">Live 5G Core Logs</h4>
-            <p className="text-xs text-muted-foreground">
-              Filter AMF/SMF logs in real-time for NSSAI, S-NSSAI, and Registration events.
-            </p>
-          </Link>
-
-          <Link
-            href="/learn"
-            className="p-5 rounded-2xl bg-card border border-border/70 hover:border-primary/50 transition-all group space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <Sparkles className="w-5 h-5 text-pink-500 group-hover:scale-110 transition-transform" />
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            <h4 className="font-bold text-sm text-foreground">5G Slicing Education</h4>
-            <p className="text-xs text-muted-foreground">
-              Learn SST, SD, S-NSSAI, and NSSAI types (Configured, Requested, Allowed, Subscribed).
-            </p>
-          </Link>
+          ))}
         </div>
       </div>
     </div>

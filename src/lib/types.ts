@@ -54,3 +54,4 @@ export interface PingResult {
   rawOutput: string;
   timestamp: string;
 }
+

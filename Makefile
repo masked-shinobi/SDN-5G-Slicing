@@ -31,3 +31,4 @@ lint:
 	npm run lint
 
 check: lint test build
+

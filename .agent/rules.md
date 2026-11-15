@@ -15,3 +15,4 @@
    - Show a short plan before coding each phase.
    - Run lint, build, and tests after each phase.
    - Verify acceptance criteria in the browser and commit to Git.
+
