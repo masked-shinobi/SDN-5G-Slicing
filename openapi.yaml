@@ -1,0 +1,336 @@
+openapi: 3.0.3
+info:
+  title: 5G Network Slicing Dashboard Bridge API
+  version: 1.0.0
+  description: >
+    Production bridge API layer interfacing Next.js App Router with Open5GS 5G Core,
+    UERANSIM (nr-gnb / nr-ue), and MongoDB (open5gs.subscribers).
+    Enforces strict security allow-lists and non-root execution.
+servers:
+  - url: http://localhost:3000
+    description: Local Dashboard & Bridge Server
+paths:
+  /api/status:
+    get:
+      summary: Get 5G Core and RAN Service Health
+      description: Returns real-time systemctl status of Open5GS network functions (AMF, SMF, UPF, NRF, UDM, UDR, PCF, NSSF, AUSF) and UERANSIM processes.
+      responses:
+        '200':
+          description: Service health report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overall:
+                    type: string
+                    example: healthy
+                  coreFunctions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: open5gs-amfd
+                        role:
+                          type: string
+                          example: AMF
+                        status:
+                          type: string
+                          example: active
+                  gnbConnected:
+                    type: boolean
+                    example: true
+                  ueRegistered:
+                    type: boolean
+                    example: true
+                  activeSessions:
+                    type: integer
+                    example: 2
+
+  /api/slices:
+    get:
+      summary: List Active 5G Network Slices
+      description: Returns provisioned network slices merged with live network interface IP allocations from Linux kernel ip addr.
+      responses:
+        '200':
+          description: List of active slices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: A
+                        sst:
+                          type: integer
+                          example: 1
+                        sd:
+                          type: string
+                          example: "000001"
+                        snssai:
+                          type: string
+                          example: "SST: 1 | SD: 000001"
+                        dnn:
+                          type: string
+                          example: internet
+                        ipPool:
+                          type: string
+                          example: 10.45.0.0/24
+                        interface:
+                          type: string
+                          example: uesimtun0
+                        status:
+                          type: string
+                          example: active
+
+  /api/subscribers:
+    get:
+      summary: Get Subscriber Details & Subscribed Slices
+      description: Fetches subscriber profile from MongoDB (open5gs.subscribers) for IMSI 999700000000001.
+      parameters:
+        - name: imsi
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "999700000000001"
+      responses:
+        '200':
+          description: Subscriber document
+    post:
+      summary: Add or Update Subscribed Slice
+      description: Adds an S-NSSAI slice configuration to the subscriber record in MongoDB with strict Zod validation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sst, sd, dnn]
+              properties:
+                imsi:
+                  type: string
+                  example: "999700000000001"
+                sst:
+                  type: integer
+                  minimum: 1
+                  maximum: 255
+                  example: 1
+                sd:
+                  type: string
+                  example: "000001"
+                dnn:
+                  type: string
+                  example: "internet"
+      responses:
+        '200':
+          description: Slice successfully provisioned
+        '400':
+          description: Zod validation error
+    delete:
+      summary: Remove Subscribed Slice
+      description: Removes an S-NSSAI slice from the subscriber's provisioned list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sst]
+              properties:
+                imsi:
+                  type: string
+                  example: "999700000000001"
+                sst:
+                  type: integer
+                  example: 2
+                sd:
+                  type: string
+                  example: "000002"
+      responses:
+        '200':
+          description: Slice removed
+
+  /api/ping:
+    get:
+      summary: Get Ping Service Allow-List
+      description: Returns the allow-listed slice interfaces and default targets.
+      responses:
+        '200':
+          description: Ping interface configuration
+    post:
+      summary: Execute Per-Slice Ping Test
+      description: >
+        Executes an allow-listed ICMP ping via slice-bound TUN interface
+        (uesimtun0 for Slice A, uesimtun1 for Slice B). Arbitrary shell input is strictly prohibited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slice]
+              properties:
+                slice:
+                  type: string
+                  enum: [A, B]
+                  example: A
+                target:
+                  type: string
+                  example: "8.8.8.8"
+                count:
+                  type: integer
+                  default: 4
+                  minimum: 1
+                  maximum: 10
+      responses:
+        '200':
+          description: Parsed ping execution output and RTT metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  sliceId:
+                    type: string
+                    example: A
+                  interface:
+                    type: string
+                    example: uesimtun0
+                  stats:
+                    type: object
+                    properties:
+                      packetsTransmitted:
+                        type: integer
+                        example: 4
+                      packetsReceived:
+                        type: integer
+                        example: 4
+                      packetLossPercent:
+                        type: number
+                        example: 0
+                      minRtt:
+                        type: number
+                        example: 14.2
+                      avgRtt:
+                        type: number
+                        example: 15.6
+                      maxRtt:
+                        type: number
+                        example: 18.1
+
+  /api/gnb:
+    post:
+      summary: Control Simulated gNB Process
+      description: Starts or stops the UERANSIM nr-gnb process via safe allow-listed scripts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, status]
+                  example: start
+      responses:
+        '200':
+          description: Process operation result
+
+  /api/ue:
+    post:
+      summary: Control Simulated UE Process
+      description: Starts or stops the UERANSIM nr-ue process via safe allow-listed scripts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, status]
+                  example: start
+      responses:
+        '200':
+          description: Process operation result
+
+  /api/test-lab/negative:
+    post:
+      summary: Execute Negative Slicing Rejection Test
+      description: >
+        Requests an unprovisioned S-NSSAI (SST=3, SD=000003) and validates that
+        Open5GS AMF rejects the PDU Session / Registration with 3GPP 5GMM Cause #62 (Slice Not Supported).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requestedSst:
+                  type: integer
+                  default: 3
+                requestedSd:
+                  type: string
+                  default: "000003"
+      responses:
+        '200':
+          description: Detailed 3GPP rejection verification report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  rejected:
+                    type: boolean
+                    example: true
+                  causeCode:
+                    type: integer
+                    example: 62
+                  causeText:
+                    type: string
+                    example: "3GPP 5GMM Cause #62: Slice Not Supported"
+
+  /api/logs:
+    get:
+      summary: Stream or Query Core Function Logs
+      description: Returns recent log entries from Open5GS AMF and SMF log files with 5G keywords filter.
+      parameters:
+        - name: service
+          in: query
+          schema:
+            type: string
+            enum: [amf, smf, all]
+            default: all
+        - name: filter
+          in: query
+          schema:
+            type: string
+            example: NSSAI
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of filtered log lines
